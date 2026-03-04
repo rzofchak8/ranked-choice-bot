@@ -9,13 +9,14 @@ from dotenv import load_dotenv
 from pyrankvote import Candidate, Ballot
 import random
 import asyncio
+from polls import create_poll
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 
 
-MY_GUILD= discord.Object(1179974599916654612)
+MY_GUILD= discord.Object(GUILD)
 
 class MyClient(discord.Client):
     # Suppress error on the User attribute being None since it fills up later
@@ -109,15 +110,13 @@ async def on_ready():
 )
 async def poll_create(interaction: discord.Interaction, poll_title: str, poll_entries: str, randomize_ballots: bool = True):
     """Creates a ranked-choice poll."""
-    msg = f'\n**poll:** {poll_title}\n **entries:**\n'
-    entries_split = poll_entries.split(',')
+    msg = f'\n**poll:** {poll_title}\n'
     
-    candidates = []
-    for entry in entries_split:
-        entry = entry.strip()
-        candidate = Candidate(entry)
-        candidates.append(candidate)
-        msg += f'- {entry}\n'
+    poll_id = create_poll()
+    if poll_id == -1:
+        print('too many polls currently, please try again later')
+        await interaction.response.send_message(msg)
+
         
     poll_id = random.randrange(1000,9999)
     

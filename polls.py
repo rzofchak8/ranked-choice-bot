@@ -1,12 +1,33 @@
 import random
 import string
 import pyrankvote
+import threading
+import time
 from pyrankvote import Candidate, Ballot
 poll_hub = {}
 
-# class Poll() {
-#     def __init__(self)
-# }
+class Poll():
+    def __init__(self, id):
+        self.id: int = id
+        # whether the poll is still active and able to be voted on
+        self.active: bool = True
+        # pyrankvote.Candidates list
+        self.candidates: list[Candidate] = []
+        # dictionary mapping user id to Voter
+        self.voters: dict[int, Voter] = {}
+        self.result = ''
+        threading.Timer(86400, self._deactivate_poll).start()
+        
+    def _deactivate_poll(self):
+        self.active = False
+
+class Voter():
+    def __init__(self, id):
+        self.id: int = id
+        # randomized dict mapping an alphanumeric letter to a Candidate
+        self.options: dict[str, Candidate] = {}
+        # ordered list of candidates post-vote
+        self.ballot: list[Candidate] = []
 
 def create_poll(entries_str: str):
     """Parses candidates of poll and returns poll_id."""
@@ -17,30 +38,27 @@ def create_poll(entries_str: str):
     if id == -1:
         return id
 
-    #FIXME make into its own class
-    poll = {}
-    poll['active'] = True
-    
-    candidates = []
+    poll = Poll(id)
     for entry in entries_split:
         entry = entry.strip()
         candidate = Candidate(entry)
-        candidates.append(candidate)
-        msg += f'- {entry}\n'
-            
-    poll['candidates'] = candidates
-    poll['voters'] = {}
-    
+        poll.candidates.append(candidate)
+
     poll_hub[id] = poll
     return id
 
 def close_poll(id: int):
     """Close a poll if it exists, removing it permanently from the poll hub. Return poll pesults."""
     # TODO: collect votes and create ballots
+    poll: Poll = poll_hub[id]
     
-    
-    candidates = poll_hub['candidates']
-    ballots = poll_hub['ballots']
+    candidates = poll.candidates
+    ballots = collect_ballots(poll)
+    if len(ballots) == 0:
+        # TODO: no votes! close poll
+        poll.active = False
+        return None
+        
     election_result = pyrankvote.instant_runoff_voting(candidates, ballots)
 
     if id in poll_hub:
@@ -60,38 +78,65 @@ def create_poll_id():
         return -1
     return id
 
-def collect_ballots(id):
-    votes = poll_hub[id]['votes']
     
 def create_ballot(poll_id: int, user_id: int):
-    poll = poll_hub[poll_id]
+    """Randomizes options and creates ballot structure for a particular user."""
+    poll: Poll = poll_hub[poll_id]
     
-    randomized_candidates = random.sample(poll['candidates'], len(poll['candidates']))
+    if not poll.active:
+        # TODO: customized message saying this poll is inactive
+        return None
     
-    user_options = {}
+    randomized_candidates = random.sample(poll.candidates, len(poll.candidates))
+    voter = Voter(user_id)
     
     for i in range(len(randomized_candidates)):
         option = string.ascii_lowercase[i]
-        user_options[option] = randomized_candidates[i]
+        voter.options[option] = randomized_candidates[i]
     
-    poll['voters'][user_id] = {
-        'options': user_options,
-        'vote': '',
-    }
-    return user_options
+    poll.voters[user_id] = voter
+    return voter.options
 
 def record_vote(poll_id: int, user_id: int, vote_str: str):
+    """Create Ballot list based off user votes, 
+    appending candidates randomly to the bottom of the ballot if needed."""
     # TODO: determine mutability of the underlying dicts
-    poll = poll_hub[poll_id]
+    poll: Poll = poll_hub[poll_id]
+    if not poll.active:
+        # TODO: customized message saying this poll is inactive
+        return None
+
+    voter: Voter = poll.voters[user_id]
+    if len(voter.ballot) != 0:
+        # TODO: customized message saying you have already voted
+        return None
+    
     votes = vote_str.split(',')
-    user_options = poll['voters'][user_id]['options']
-    user_ballot = []
+    user_options = voter.options.copy()
+    ranked_candidates = []
     for vote in votes:
         if vote not in user_options:
             # TODO: user error, should they be able to try again?
             return False
-        item = user_optionsr
-        user_ballot.append(user_options[vote])
+        item = user_options[vote]
+        ranked_candidates.append(item)
+        del user_options[vote]
     
+    # randomize and append any values not voted for 
+    leftovers = user_options.values()
+    if len(leftovers) != 0:
+        leftovers = random.sample(leftovers, len(leftovers))
+        ranked_candidates.extend(leftovers)    
 
-    poll['voters'][user_id]['ballot'] = user_ballot
+    voter.ballot = Ballot(ranked_candidates)
+    poll.voters[user_id] = voter
+    return True
+    
+def collect_ballots(poll: Poll) -> list[Ballot]:
+    """Gather all votes for the poll into a list."""
+    ballots = []
+    for voter in poll.voters.items():
+        voter: Voter
+        ballots.append(voter.ballot)
+        
+    return ballots

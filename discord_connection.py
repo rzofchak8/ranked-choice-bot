@@ -159,4 +159,5 @@ TODOS:
 - add pretty formatting to messages:
     - poll creation message
     - final results message
+- elegant shutdown
 """

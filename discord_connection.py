@@ -1,22 +1,17 @@
 # bot.py
-import os
-import csv
-from io import StringIO
-from pprint import pprint
+import asyncio
 import discord
+import os
+import random
 from discord import app_commands
 from dotenv import load_dotenv
-from pyrankvote import Candidate, Ballot
-import random
-import asyncio
-from polls import create_poll
+from polls import create_poll, create_ballot, record_vote, close_poll
+from pprint import pprint
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD = os.getenv('DISCORD_GUILD')
-
-
-MY_GUILD= discord.Object(GUILD)
+GUILD_ID = os.getenv('DISCORD_GUILD')
+MY_GUILD= discord.Object(GUILD_ID)
 
 class MyClient(discord.Client):
     # Suppress error on the User attribute being None since it fills up later
@@ -42,9 +37,10 @@ class MyClient(discord.Client):
         await self.tree.sync(guild=MY_GUILD)
 
 class PollCreateView(discord.ui.View):
-    def __init__(self, *, timeout = 180):
+    def __init__(self, *, timeout = 180, poll_id):
         super().__init__(timeout=timeout)
         self.used_users = set()
+        self.poll_id: int = poll_id
         
     @discord.ui.button(label='Request Ballot', style=discord.ButtonStyle.primary)
     async def request_ballot(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -59,7 +55,15 @@ class PollCreateView(discord.ui.View):
             return
 
         self.used_users.add(user.id)
-
+        candidates = create_ballot(self.poll_id, user.id)
+        
+        if candidates is None:
+            await interaction.response.send_message(
+                "Poll no longer exists!",
+                ephemeral=True
+            )
+            return
+        
         await interaction.response.send_message(
             "Check your DMs!",
             ephemeral=True
@@ -67,7 +71,10 @@ class PollCreateView(discord.ui.View):
 
         try:
             dm = await user.create_dm()
-            await dm.send("Hello! Please reply with something. You have 60 seconds.")
+            msg = f'Hello! Please reply with responses for poll {self.poll_id}. Your votes should be in a comma-separated fashion (i.e. a,b,c,...) You have 60 seconds.\n**Candidates**:\n'
+            for char, candidate in candidates.items():
+                msg += f'({char}) {candidate}\n'
+            await dm.send(msg)
 
             def check(m):
                 return m.author.id == interaction.user.id and m.guild is None
@@ -77,8 +84,15 @@ class PollCreateView(discord.ui.View):
                 check=check,
                 timeout=60
             )
-
-            await dm.send(f"You said: {reply.content}")
+            
+            res = record_vote(self.poll_id, user.id, reply.content.strip())
+            if res is None:
+                await dm.send("Either the poll is closed, or you already voted. Your last vote has not been recorded.")
+            elif res is False:
+                # FIXME: allow revoting
+                await dm.send("You have entered an invalid character, please try voting again.")
+            else:
+                await dm.send(f"Your vote has been recorded!\nYou voted: **{reply.content}**")
             await dm.send("This interaction is now closed.")
 
         except discord.Forbidden:
@@ -106,41 +120,42 @@ async def on_ready():
 @app_commands.describe(
     poll_title='the title of the poll',
     poll_entries='a commma-separated list of poll options',
-    randomize_ballots='randomize ballot order (default = true)',
 )
-async def poll_create(interaction: discord.Interaction, poll_title: str, poll_entries: str, randomize_ballots: bool = True):
+async def poll_create(interaction: discord.Interaction, poll_title: str, poll_entries: str):
     """Creates a ranked-choice poll."""
     msg = f'\n**poll:** {poll_title}\n'
     
-    poll_id = create_poll()
+    poll_id = create_poll(poll_entries)
     if poll_id == -1:
         print('too many polls currently, please try again later')
         await interaction.response.send_message(msg)
-
-        
-    poll_id = random.randrange(1000,9999)
-    
+   
     msg += f'**poll_id:** #{poll_id}'
     
-    view = PollCreateView()
+    view = PollCreateView(poll_id=poll_id)
     await interaction.response.send_message(msg, view=view)
+
+@client.tree.command()
+@app_commands.describe(
+    poll_id='id of the poll to close',
+)
+async def poll_close(interaction: discord.Interaction, poll_id: int):
+    """Closes a ranked-choice poll and returns the results."""
+    result = close_poll(poll_id)
+    await interaction.response.send_message(result)
 
 
 client.run(TOKEN)
 
 """
 TODOS:
-- create a hub for polls - dict tying id to poll ctx?
 - change message timing limit to 24hrs
-- close poll at 24 hrs
-- parse response for user id
-- create ballot for user id
-
-- poll_close command
-- create ballots
-- fill in undeclared chars randomly at end of ballot
-- create ballots 
-- invoke pyrankvote and parse election result - show only final result
 
 - SEPARATE OUT FUNCITONALITY INTO FILES
+- LOGS
+- declare return type for all our functions
+- ensure error handling is consistent (can a user re-vote after an error of some sort, etc)
+- remove poll from existence after some time
+- add pretty formatting to messages:
+- 
 """

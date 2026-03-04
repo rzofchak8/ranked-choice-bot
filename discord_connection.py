@@ -157,5 +157,6 @@ TODOS:
 - ensure error handling is consistent (can a user re-vote after an error of some sort, etc)
 - remove poll from existence after some time
 - add pretty formatting to messages:
-- 
+    - poll creation message
+    - final results message
 """

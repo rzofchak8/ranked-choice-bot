@@ -2,9 +2,9 @@ import random
 import string
 import pyrankvote
 import threading
-import time
 from pyrankvote import Candidate, Ballot
-poll_hub = {}
+
+poll_hub: dict[int, Poll] = {}
 
 class Poll():
     def __init__(self, id):
@@ -29,7 +29,7 @@ class Voter():
         # ordered list of candidates post-vote
         self.ballot: list[Candidate] = []
 
-def create_poll(entries_str: str):
+def create_poll(entries_str: str) -> int:
     """Parses candidates of poll and returns poll_id."""
     entries_split = entries_str.split(',')
     
@@ -47,6 +47,13 @@ def create_poll(entries_str: str):
     print(f"successfully created poll with id: {id}")
     poll_hub[id] = poll
     return id
+
+
+def get_candidates(poll_id) -> list[Candidate]|None:
+    """Return a poll's list of candidates"""
+    if poll_id not in poll_hub:
+        return None
+    return poll_hub[poll_id].candidates
 
 
 def close_poll(id: int):
@@ -71,7 +78,7 @@ def close_poll(id: int):
     return election_result
     
 
-def create_poll_id():
+def create_poll_id() -> int:
     """Creates a unique 4-digit id for the latest poll."""
     id = random.randrange(1000,9999)
     counter = 0

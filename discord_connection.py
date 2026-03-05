@@ -2,11 +2,11 @@
 import asyncio
 import discord
 import os
-import random
+import string
 from discord import app_commands
 from dotenv import load_dotenv
-from polls import create_poll, create_ballot, record_vote, close_poll
-from pprint import pprint
+from polls import create_poll, create_ballot, record_vote, close_poll, get_candidates
+# from pprint import pprint
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -71,9 +71,12 @@ class PollCreateView(discord.ui.View):
 
         try:
             dm = await user.create_dm()
-            msg = f'Hello! Please reply with responses for poll {self.poll_id}. Your votes should be in a comma-separated fashion (i.e. a,b,c,...) You have 60 seconds.\n**Candidates**:\n'
+            msg = (f'Hello! Please reply with responses for poll #**{self.poll_id}**. ' + 
+                'Your votes should be in a comma-separated fashion (i.e. `a,b,c,...`). ' + 
+                'You have 24 hours, or until the poll is manually closed.\n**Candidates**:\n```')
             for char, candidate in candidates.items():
                 msg += f'({char}) {candidate}\n'
+            msg += "```"
             await dm.send(msg)
 
             def check(m):
@@ -82,7 +85,7 @@ class PollCreateView(discord.ui.View):
             reply = await interaction.client.wait_for(
                 "message",
                 check=check,
-                timeout=60
+                timeout=60*60*24
             )
             
             res = record_vote(self.poll_id, user.id, reply.content.strip())
@@ -129,9 +132,18 @@ async def poll_create(interaction: discord.Interaction, poll_title: str, poll_en
     if poll_id == -1:
         print('too many polls currently, please try again later')
         await interaction.response.send_message(msg)
-   
-    msg += f'**poll_id:** #{poll_id}'
+
+    candidates = get_candidates(poll_id)
+    if candidates is None:
+        await interaction.response.send_message("Something went wrong when fetching candidates. Please try creating another poll.")
+        return
+    msg += f'**poll_id:** #{poll_id}\n```Candidates:\n\n'
     
+    for i in range(len(candidates)):
+        option = string.ascii_lowercase[i]
+        msg += f'({option}) {candidates[i]}\n'
+        
+    msg += "```\n"
     view = PollCreateView(poll_id=poll_id)
     await interaction.response.send_message(msg, view=view)
 
@@ -142,7 +154,7 @@ async def poll_create(interaction: discord.Interaction, poll_title: str, poll_en
 async def poll_close(interaction: discord.Interaction, poll_id: int):
     """Closes a ranked-choice poll and returns the results."""
     result = close_poll(poll_id)
-    await interaction.response.send_message(result)
+    await interaction.response.send_message(f'```{result}```')
 
 
 client.run(TOKEN)

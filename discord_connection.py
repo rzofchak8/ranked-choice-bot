@@ -172,16 +172,16 @@ client.run(TOKEN)
 
 """
 TODOS:
-- change message timing limit to 24hrs
++ change message timing limit to 24hrs
 
 - SEPARATE OUT FUNCITONALITY INTO FILES
 - LOGS
 - declare return type for all our functions
-- ensure error handling is consistent (can a user re-vote after an error of some sort, etc)
++ ensure error handling is consistent (can a user re-vote after an error of some sort, etc)
 - remove poll from existence after some time
-- add pretty formatting to messages:
-    - poll creation message
-    - final results message
++ add pretty formatting to messages:
+    + poll creation message
+    + final results message
 - elegant shutdown
 - TRY/CATCH ERROR HANDLING
 """

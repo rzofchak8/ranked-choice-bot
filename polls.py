@@ -173,7 +173,7 @@ def get_user_ballot(poll_id: int, user_id: int):
     user_ballot: list[Candidate] = poll.voters[user_id].ballot
     ballot_str = ''
     for i in range(len(user_ballot)):
-        ballot_str += f"{i}  |  {user_ballot[i]}\n"
+        ballot_str += f"{i+1}  |  {user_ballot[i]}\n"
     
     return ballot_str
     

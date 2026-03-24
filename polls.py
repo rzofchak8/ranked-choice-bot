@@ -58,6 +58,7 @@ def get_candidates(poll_id) -> list[Candidate]|None:
 
 def close_poll(id: int):
     """Close a poll if it exists, removing it permanently from the poll hub. Return poll pesults."""
+    print(f"closing poll {id}")
     if id not in poll_hub:
         print(f"Poll with that ID ({id}) not found.")
         return "Poll with that ID not found."
@@ -72,7 +73,7 @@ def close_poll(id: int):
         poll.active = False
         print("No votes for this poll were made! Closing poll")
         return "No votes for this poll were made! Closing poll"
-        
+    
     election_result = pyrankvote.instant_runoff_voting(candidates, ballots)
     del poll_hub[id]
     return election_result
@@ -129,8 +130,11 @@ def record_vote(poll_id: int, user_id: int, vote_str: str) -> bool|None:
     user_options = voter.options.copy()
     ranked_candidates = []
     for vote in votes:
-        vote = vote.strip()
+        vote = vote.strip().lower()
         if vote not in user_options:
+            if vote in voter.options:
+                print(f"user {user_id} has put in a duplicate vote option: {vote}")
+                continue
             print(f"user {user_id} has put in at least one invalid vote option: {vote}")
             return False
         item = user_options[vote]
@@ -138,12 +142,13 @@ def record_vote(poll_id: int, user_id: int, vote_str: str) -> bool|None:
         del user_options[vote]
     
     # randomize and append any values not voted for 
-    leftovers = user_options.values()
+    leftovers = list(user_options.values())
     if len(leftovers) != 0:
-        leftovers = random.sample(leftovers, len(leftovers))
+        if len(leftovers) != 1:
+            leftovers = random.sample(leftovers, len(leftovers))
         ranked_candidates.extend(leftovers)    
 
-    voter.ballot = Ballot(ranked_candidates)
+    voter.ballot = ranked_candidates
     poll.voters[user_id] = voter
     return True
     
@@ -151,6 +156,24 @@ def collect_ballots(poll: Poll) -> list[Ballot]:
     """Gather all votes for the poll into a list."""
     ballots = []
     for voter in poll.voters.values():
-        ballots.append(voter.ballot)
+        ballots.append(Ballot(voter.ballot))
         
     return ballots
+
+def get_user_ballot(poll_id: int, user_id: int):
+    """Get pretty-printed ballot for a particular user."""
+    if poll_id not in poll_hub:
+        print(f"Poll with that ID ({poll_id}) not found.")
+        return "Poll with that ID not found."
+    poll: Poll = poll_hub[poll_id]
+    if not poll.active:
+        print("Poll has already been closed.")
+        return "Poll has already been closed."
+    
+    user_ballot: list[Candidate] = poll.voters[user_id].ballot
+    ballot_str = ''
+    for i in range(len(user_ballot)):
+        ballot_str += f"{i}  |  {user_ballot[i]}\n"
+    
+    return ballot_str
+    

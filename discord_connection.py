@@ -152,7 +152,7 @@ async def poll_create(interaction: discord.Interaction, poll_title: str, poll_en
         
     msg += "```\n"
     embed = discord.Embed(title=f"Poll #{poll_id}", description=str(msg)[:4096])
-    view = PollCreateView(poll_id=poll_id)
+    view = PollCreateView(poll_id=poll_id, timeout=86400)
     await interaction.response.send_message(embed=embed, view=view)
 
 @client.tree.command()
